@@ -78,7 +78,6 @@ public class SubSamplerUI extends AbstractSamplerGui implements Constants{
 		return "MQTT Sub Sampler";
 	}
 	
-	@Override
 	public TestElement createTestElement() {
 		SubSampler sampler = new SubSampler();
 		this.setupSamplerProperties(sampler);
@@ -96,12 +95,10 @@ public class SubSamplerUI extends AbstractSamplerGui implements Constants{
 		this.debugResponse.setSelected(sampler.isDebugResponse());
 	}
 
-	@Override
 	public String getLabelResource() {
 		return "";
 	}
 
-	@Override
 	public void modifyTestElement(TestElement arg0) {
 		SubSampler sampler = (SubSampler) arg0;
 		this.setupSamplerProperties(sampler);

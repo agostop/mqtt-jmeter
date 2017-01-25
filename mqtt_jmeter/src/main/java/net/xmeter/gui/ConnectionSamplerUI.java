@@ -47,7 +47,6 @@ public class ConnectionSamplerUI extends AbstractSamplerGui implements Constants
 		connUI.configure(sampler);
 	}
 
-	@Override
 	public TestElement createTestElement() {
 		ConnectionSampler sampler = new ConnectionSampler();
 		this.configureTestElement(sampler);
@@ -55,7 +54,6 @@ public class ConnectionSamplerUI extends AbstractSamplerGui implements Constants
 		return sampler;
 	}
 
-	@Override
 	public String getLabelResource() {
 		return "";
 	}
@@ -65,7 +63,6 @@ public class ConnectionSamplerUI extends AbstractSamplerGui implements Constants
 		return "MQTT Connection Sampler";
 	}
 
-	@Override
 	public void modifyTestElement(TestElement arg0) {
 		ConnectionSampler sampler = (ConnectionSampler)arg0;
 		this.configureTestElement(sampler);

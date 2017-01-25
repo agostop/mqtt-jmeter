@@ -38,15 +38,15 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 	private final JLabeledTextField certificationFilePath1 = new JLabeledTextField("Certification file path(*.jks):", 20);
 	private final JLabeledTextField certificationFilePath2 = new JLabeledTextField("Certification file path(*.p12):", 20);
 	
-	private final JLabeledTextField userName = new JLabeledTextField("Key file username:", 6);
-	private final JLabeledTextField password = new JLabeledTextField("Key file Password:", 6);
+	private final JLabeledTextField userName = new JLabeledTextField("Key file username:", 60);
+	private final JLabeledTextField password = new JLabeledTextField("Key file Password:", 60);
 
 	private JButton browse1;
 	private JButton browse2;
 	private static final String BROWSE1 = "browse1";
 	private static final String BROWSE2 = "browse2";
 	
-	private final JLabeledTextField connNamePrefix = new JLabeledTextField("ClientId prefix:", 8);
+	private final JLabeledTextField connNamePrefix = new JLabeledTextField("ClientId:", 12);
 	private final JLabeledTextField connKeepAlive = new JLabeledTextField("Keep alive(s):", 4);
 	
 	private final JLabeledTextField connKeeptime = new JLabeledTextField("Connection keep time(s):", 4);
@@ -108,7 +108,7 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 		JPanel pPanel = new HorizontalPanel();
 		//pPanel.setLayout(new GridLayout(1, 2));
 
-		protocols = new JLabeledChoice("Protocols:", new String[] { "TCP", "SSL" }, true, false);
+		protocols = new JLabeledChoice("Protocols:", new String[] { "WSS", "TCP", "SSL"}, true, false);
 		protocols.addChangeListener(this);
 		pPanel.add(protocols, BorderLayout.WEST);
 
@@ -152,7 +152,6 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 		return protocolPanel;
 	}
 
-	@Override
 	public void actionPerformed(ActionEvent e) {
 		String action = e.getActionCommand();
 		if(BROWSE1.equals(action)) {
@@ -175,7 +174,6 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 		return path;
 	}
 	
-	@Override
 	public void stateChanged(ChangeEvent e) {
 		if(e.getSource() == dualAuth) {
 			if(dualAuth.isSelected()) {
@@ -200,6 +198,9 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 			} else if("SSL".equals(protocols.getText())) {
 				dualAuth.setVisible(true);
 				dualAuth.setEnabled(true);
+			} else if ("WSS".equals(protocols.getText())) {
+				dualAuth.setVisible(false);
+				dualAuth.setSelected(false);			
 			}
 		}
 	}

@@ -51,7 +51,7 @@ public interface Constants {
 	public static final String DEFAULT_SERVER = "127.0.0.1";
 	public static final int DEFAULT_PORT = 1883;
 	public static final int DEFAULT_CONN_TIME_OUT = 10;
-	public static final String DEFAULT_PROTOCOL = "TCP";
+	public static final String DEFAULT_PROTOCOL = "WSS";
 	
 	public static final String DEFAULT_TOPIC_NAME = "test_topic";
 	

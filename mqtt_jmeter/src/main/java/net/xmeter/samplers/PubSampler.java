@@ -80,7 +80,6 @@ public class PubSampler extends AbstractMQTTSampler implements ThreadListener {
 		return getPropertyAsString(CONN_CLIENT_ID_PREFIX, DEFAULT_CONN_PREFIX_FOR_PUB);
 	}
 
-	@Override
 	public SampleResult sample(Entry arg0) {
 		SampleResult result = new SampleResult();
 		try {
@@ -117,7 +116,6 @@ public class PubSampler extends AbstractMQTTSampler implements ThreadListener {
 		return result;
 	}
 
-	@Override
 	public void threadStarted() {
 		try {
 			mqtt.setHost(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort());
@@ -161,7 +159,6 @@ public class PubSampler extends AbstractMQTTSampler implements ThreadListener {
 		}
 	}
 
-	@Override
 	public void threadFinished() {
 		if (this.connection != null) {
 			this.connection.disconnect();

@@ -24,7 +24,7 @@ import org.fusesource.mqtt.client.Topic;
 import net.xmeter.Util;
 
 @SuppressWarnings("deprecation")
-public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
+public class SubSamplerWSS extends AbstractMQTTSampler implements ThreadListener {
 	private transient MQTT mqtt = new MQTT();
 	private transient CallbackConnection connection = null;
 	private transient static Logger logger = LoggingManager.getLoggerForClass();

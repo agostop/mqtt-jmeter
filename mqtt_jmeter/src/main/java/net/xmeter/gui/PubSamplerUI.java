@@ -104,7 +104,6 @@ public class PubSamplerUI extends AbstractSamplerGui implements Constants, Chang
 		return "MQTT Pub Sampler";
 	}
 
-	@Override
 	public void stateChanged(ChangeEvent e) {
 		if(e.getSource() == this.messageTypes) {
 			int selectedIndex = this.messageTypes.getSelectedIndex();
@@ -120,12 +119,10 @@ public class PubSamplerUI extends AbstractSamplerGui implements Constants, Chang
 		}
 	}
 
-	@Override
 	public String getLabelResource() {
 		return "";
 	}
 
-	@Override
 	public TestElement createTestElement() {
 		PubSampler sampler = new PubSampler();
 		this.setupSamplerProperties(sampler);
@@ -154,7 +151,6 @@ public class PubSamplerUI extends AbstractSamplerGui implements Constants, Chang
 		sendMessage.setText(sampler.getMessage());
 	}
 
-	@Override
 	public void modifyTestElement(TestElement arg0) {
 		PubSampler sampler = (PubSampler) arg0;
 		this.setupSamplerProperties(sampler);
