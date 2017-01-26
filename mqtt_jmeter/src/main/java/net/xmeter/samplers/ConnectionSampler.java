@@ -19,13 +19,10 @@ import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
-import net.xmeter.Util;
-
 public class ConnectionSampler extends AbstractMQTTSampler
 		implements TestStateListener, ThreadListener, Interruptible, SampleListener {
 	private transient static Logger logger = LoggingManager.getLoggerForClass();
 //	private transient String clientId = Util.generateClientId(getConnPrefix());
-	private MqttConnectOptions options;
 	private boolean interrupt = false;
 	private final String  TOPIC = "rongke";
 	private MqttClient mqtt = null;
@@ -45,7 +42,9 @@ public class ConnectionSampler extends AbstractMQTTSampler
 			String clientId = getConnPrefix();
 			mqtt = new MqttClient(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort(), 
 					clientId, new MemoryPersistence());
-			options = new MqttConnectOptions();
+			
+			MqttConnectOptions options = new MqttConnectOptions();
+			
 			options.setCleanSession(true);
 			if (!"".equals(getUserNameAuth().trim())) {
 				options.setUserName(getUserNameAuth());
@@ -64,17 +63,19 @@ public class ConnectionSampler extends AbstractMQTTSampler
 			//Topic[] topics = { new Topic("rongke" + clientId, QoS.AT_LEAST_ONCE) };
 			
 			options.setWill(mqtt.getTopic(TOPIC), "close".getBytes(), 0, true);
+			result.sampleStart();
 			mqtt.connect(options);
 			
 			int[] Qos = {0};
 			String[] topic1 = {TOPIC};
 			mqtt.subscribe(topic1, Qos);
 
-			result.sampleStart();
+			result.sampleEnd();
 			result.setSuccessful(true);
 			result.setResponseData("Successful.".getBytes());
 			result.setResponseMessage(MessageFormat.format("Connection {0} connected successfully.", mqtt));
 			result.setResponseCodeOK();
+			result.setStopTestNow(true);
 		} catch (Exception e) {
 			logger.log(Priority.ERROR, e.getMessage(), e);
 			result.sampleEnd();
@@ -82,6 +83,7 @@ public class ConnectionSampler extends AbstractMQTTSampler
 			result.setResponseMessage(MessageFormat.format("Connection {0} connected failed.", mqtt));
 			result.setResponseData("Failed.".getBytes());
 			result.setResponseCode("500");
+			result.setStopTestNow(true);
 		}
 		return result;
 	}

@@ -108,7 +108,7 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 		JPanel pPanel = new HorizontalPanel();
 		//pPanel.setLayout(new GridLayout(1, 2));
 
-		protocols = new JLabeledChoice("Protocols:", new String[] { "WSS", "TCP", "SSL"}, true, false);
+		protocols = new JLabeledChoice("Protocols:", new String[] {"TCP", "SSL", "WSS"}, true, false);
 		protocols.addChangeListener(this);
 		pPanel.add(protocols, BorderLayout.WEST);
 
@@ -220,10 +220,24 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 			dualAuth.setSelected(sampler.isDualSSLAuth());	
 		}
 		password.setText(sampler.getKeyFilePassword());
-		if(DEFAULT_PROTOCOL.equals(sampler.getProtocol())) {
-			protocols.setSelectedIndex(0);	
-		} else {
+		/*
+		 * if(DEFAULT_PROTOCOL.equals(sampler.getProtocol())) {
+		 * protocols.setSelectedIndex(0); } else {
+		 * protocols.setSelectedIndex(1); }
+		 */
+		switch (sampler.getProtocol()) {
+
+		case "SSL":
 			protocols.setSelectedIndex(1);
+			break;
+			
+		case "WSS":
+			protocols.setSelectedIndex(2);
+			break;
+
+		default:
+			protocols.setSelectedIndex(0);
+			break;
 		}
 		reconnAttmptMax.setText(String.valueOf(sampler.getConnReconnAttamptMax()));
 		serverAddr.setText(sampler.getServer());
@@ -247,7 +261,7 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 		sampler.setDualSSLAuth(dualAuth.isSelected());
 		sampler.setKeyFilePassword(password.getText());
 		sampler.setKeyFileUsrName(userName.getText());
-		sampler.setPort(parseInt(serverPort.getText()));
+		sampler.setPort(serverPort.getText());
 		sampler.setProtocol(protocols.getText());
 		sampler.setServer(serverAddr.getText());
 		sampler.setUserNameAuth(userNameAuth.getText());

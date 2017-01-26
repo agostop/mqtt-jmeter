@@ -18,11 +18,11 @@ public abstract class AbstractMQTTSampler extends AbstractSampler implements Con
 		setProperty(SERVER, server);
 	}
 
-	public int getPort() {
-		return getPropertyAsInt(PORT, DEFAULT_PORT);
+	public String getPort() {
+		return getPropertyAsString(PORT, DEFAULT_PORT);
 	}
 
-	public void setPort(int port) {
+	public void setPort(String port) {
 		setProperty(PORT, port);
 	}
 
