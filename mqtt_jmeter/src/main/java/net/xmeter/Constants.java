@@ -64,6 +64,9 @@ public interface Constants {
 	public static final String DEFAULT_PORT = "1883";
 	public static final String DEFAULT_CONN_TIME_OUT = "10";
 	public static final String DEFAULT_PROTOCOL = "TCP";
+	public static final String DEFAULT_PROTOCOL_SSL = "SSL";
+	public static final String DEFAULT_PROTOCOL_WS = "WS";
+	public static final String DEFAULT_PROTOCOL_WS_SSL = "WSS";
 	
 	public static final String JMETER_VARIABLE_PREFIX = "${";
 	
