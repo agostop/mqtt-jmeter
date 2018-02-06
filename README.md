@@ -1,3 +1,6 @@
+# Release
+The version 1.0 is released at 18th, Dec, 2017. Now the plugin supports share MQTT connection in the same threadgroup. Also, this version fixed some of bugs reported in the community.
+
 # mqtt-jmeter
 MQTT JMeter Plugin, it's used for testing MQTT protocol. The plugin was used for EMQ's performance benchmark test, and here is [report link](https://github.com/emqtt/emq-xmeter-cn).
 The plugin is developed and maintained by [XMeter](https://www.xmeter.net). XMeter is a professional performance testing service provider.
@@ -72,7 +75,27 @@ User can configure MQTT server with user name & password authentication, refer t
 ## Pub sampler
 ![pub_sampler](screenshots/pub_sampler.png)
 
-For **MQTT connection**, **User authentication** and **Connection options** section settings, please refer to *Connection sampler* for more detailed information.
+For **MQTT connection**, **User authentication**,  **Connection options** and **MQTT version** section settings, please refer to *Connection sampler* for more detailed information.
+
+- **Share conn in thread**: This option allows all of pub and sub samplers in the same threadgroup shares the same connection, this can simulate the situation of one device can be either pub or sub. For example, one IoT device can either send message to server, or receive the control message from server. Please notice, only those samplers in the same threadgroup check this option, then the connection will be shared. Also, the connection settings of first pub/sub sampler in the threadgroup will be used for shared connections, rests of connection settings in other samplers will be ignored if the option is checked. Please take a look at following 3 examples.
+
+```
+ThreadGroupSample1
+  PubSampler1 (shared connection), the connection settings will be used for the shared connection.
+  SubSampler1 (shared connection), use shared connection of PubSampler1, the connection setting of this sampler will be ignored.
+
+
+ThreadGroupSample2
+  PubSampler1 (shared connection), the connection settings will be used for the shared connection.
+  SubSampler1 (not shared connection), another connection will be created with configuration in this sampler.
+
+
+ThreadGroupSample3
+  PubSampler1 (not shared connection), one connection will be created for the connection setting in this sampler.
+  SubSampler1 (shared connection), the connection settings will be used for the shared connection.
+  SubSampler2 (shared connection), use shared connection of SubSampler1, so the connection setting of this sampler will be ignored.
+
+```
 
 ### Pub options
 
@@ -97,13 +120,15 @@ For **MQTT connection**, **User authentication** and **Connection options** sect
 ## Sub sampler
 ![sub_sampler](screenshots/sub_sampler.png)
 
-For **MQTT connection**, **User authentication** and **Connection options** section settings, please refer to *Connection sampler* for more detailed information.
+For **MQTT connection**, **User authentication**,  **Connection options** and **MQTT version** section settings, please refer to *Connection sampler* for more detailed information.
+
+For **Share conn in thread**, please refer to the Pub sampler.
 
 ### Sub options
 
 -  **QoS level**: The available QoS value, 0 is AT_MOST_ONCE, 1 is AT_LEAST_ONCE and 2 is EXACTLY_ONCE.
 
--  **Topic name**: The topic name that subscriber will subscribe to.
+-  **Topic name**: The topic name that subscriber will subscribe to. If want to subscribe multiple topics, please use comma to separate the different topics.
 
 -  **Payload includes timestamp**: If the checkbox is enabled, then it means the payload includes timestamp. It can be used to calcuate the message latency time.
 

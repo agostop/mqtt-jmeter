@@ -5,10 +5,7 @@ import java.io.IOException;
 import java.text.MessageFormat;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.jmeter.samplers.Entry;
 import org.apache.jmeter.samplers.SampleResult;
@@ -41,10 +38,10 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 	private transient ConcurrentLinkedQueue<SubBean> batches = new ConcurrentLinkedQueue<>();
 	private boolean printFlag = false;
 
-	private transient Object lock = new Object();
-	private transient AtomicBoolean threadFinished = new AtomicBoolean(false); 
+	private transient Object dataLock = new Object();
 	
 	private int qos = QOS_0;
+	private String connKey = "";
 	/**
 	 * 
 	 */
@@ -130,232 +127,295 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 	}
 
 	@Override
+	public boolean isConnectionShareShow() {
+		return true;
+	}
+	
+	private String getKey() {
+		String key = getThreadName();
+		if(!isConnectionShare()) {
+			key = new String(getThreadName() + this.hashCode());
+		}
+		return key;
+	}
+	
+	@Override
 	public SampleResult sample(Entry arg0) {
 		final boolean sampleByTime = SAMPLE_ON_CONDITION_OPTION1.equals(getSampleCondition());
 		final int sampleCount = Integer.parseInt(getSampleCount());
-		if (connection == null) { // first loop, initializing ..
-			try {
-				if (!DEFAULT_PROTOCOL.equals(getProtocol())) {
-					mqtt.setSslContext(Util.getContext(this));
-				}
-				
-				mqtt.setHost(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort());
-				mqtt.setVersion(getMqttVersion());
-				mqtt.setKeepAlive((short) Integer.parseInt(getConnKeepAlive()));
-	
-				String clientId = null;
-				if(isClientIdSuffix()) {
-					clientId = Util.generateClientId(getConnClientId());
-				} else {
-					clientId = getConnClientId();
-				}
-				mqtt.setClientId(clientId);
-	
-				mqtt.setConnectAttemptsMax(Integer.parseInt(getConnAttamptMax()));
-				mqtt.setReconnectAttemptsMax(Integer.parseInt(getConnReconnAttamptMax()));
-	
-				if (!"".equals(getUserNameAuth().trim())) {
-					mqtt.setUserName(getUserNameAuth());
-				}
-				if (!"".equals(getPasswordAuth().trim())) {
-					mqtt.setPassword(getPasswordAuth());
-				}
-				
-				connection = mqtt.callbackConnection();
-				connection.listener(new Listener() {
-					@Override
-					public void onPublish(UTF8Buffer topic, Buffer body, Runnable ack) {
-						try {
-							ByteArrayOutputStream baos = new ByteArrayOutputStream();
-							body.writeTo(baos);
-							String msg = baos.toString();
-							ack.run();
-							synchronized (lock) {
-								SubBean bean = null;
-								if(batches.isEmpty()) {
-									bean = new SubBean();
-									batches.add(bean);
-								} else {
-									SubBean[] beans = new SubBean[batches.size()];
-									batches.toArray(beans);
-									bean = beans[beans.length - 1];
-								}
-								
-								if((!sampleByTime) && (bean.getReceivedCount() == sampleCount)) { //Create a new batch when latest bean is full.
-									logger.info("The tail bean is full, will create a new bean for it.");
-									bean = new SubBean();
-									batches.add(bean);
-								}
-								if (isAddTimestamp()) {
-									long now = System.currentTimeMillis();
-									int index = msg.indexOf(TIME_STAMP_SEP_FLAG);
-									if (index == -1 && (!printFlag)) {
-										logger.info("Payload does not include timestamp: " + msg);
-										printFlag = true;
-									} else if (index != -1) {
-										long start = Long.parseLong(msg.substring(0, index));
-										long elapsed = now - start;
-										
-										double avgElapsedTime = bean.getAvgElapsedTime();
-										int receivedCount = bean.getReceivedCount();
-										avgElapsedTime = (avgElapsedTime * receivedCount + elapsed) / (receivedCount + 1);
-										bean.setAvgElapsedTime(avgElapsedTime);
-									}
-								}
-								if (isDebugResponse()) {
-									bean.getContents().add(msg);
-								}
-								bean.setReceivedMessageSize(bean.getReceivedMessageSize() + msg.length());
-								bean.setReceivedCount(bean.getReceivedCount() + 1);
-								if(!sampleByTime) {
-									//logger.info(System.currentTimeMillis() + ": need notify? receivedCount=" + bean.getReceivedCount() + ", sampleCount=" + sampleCount);
-									if(bean.getReceivedCount() == sampleCount) {
-										lock.notify();
-									}
-								}
-							}
-						} catch (IOException e) {
-							logger.log(Priority.ERROR, e.getMessage(), e);
-						}
-					}
-	
-					@Override
-					public void onFailure(Throwable value) {
-						connectFailed = true;
-						connection.kill(null);
-					}
-	
-					@Override
-					public void onDisconnected() {
-					}
-	
-					@Override
-					public void onConnected() {
-					}
-				});
-	
-				final String topicName = getTopic();
+		connKey = getKey();
+		if(connection == null) {
+			connection = ConnectionsManager.getInstance().getConnection(connKey);
+			final String topicName= getTopic();
+			if(connection != null) {
+				logger.info("Use the shared connection: " + connection);
+				setListener(sampleByTime, sampleCount);
+				listenToTopics(topicName);
+			} else {
+				 // first loop, initializing ..
 				try {
-					qos = Integer.parseInt(getQOS());
-				} catch(Exception ex) {
-					logger.error(MessageFormat.format("Specified invalid QoS value {0}, set to default QoS value {1}!", ex.getMessage(), qos));
-					qos = QOS_0;
+					if (!DEFAULT_PROTOCOL.equals(getProtocol())) {
+						mqtt.setSslContext(Util.getContext(this));
+					}
+					
+					mqtt.setHost(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort());
+					mqtt.setVersion(getMqttVersion());
+					mqtt.setKeepAlive((short) Integer.parseInt(getConnKeepAlive()));
+		
+					String clientId = null;
+					if(isClientIdSuffix()) {
+						clientId = Util.generateClientId(getConnClientId());
+					} else {
+						clientId = getConnClientId();
+					}
+					mqtt.setClientId(clientId);
+		
+					mqtt.setConnectAttemptsMax(Integer.parseInt(getConnAttamptMax()));
+					mqtt.setReconnectAttemptsMax(Integer.parseInt(getConnReconnAttamptMax()));
+		
+					if (!"".equals(getUserNameAuth().trim())) {
+						mqtt.setUserName(getUserNameAuth());
+					}
+					if (!"".equals(getPasswordAuth().trim())) {
+						mqtt.setPassword(getPasswordAuth());
+					}
+					
+					connection = ConnectionsManager.getInstance().createConnection(connKey, mqtt);
+					setListener(sampleByTime, sampleCount);
+					connection.connect(new Callback<Void>() {
+						@Override
+						public void onSuccess(Void value) {
+							listenToTopics(topicName);
+							ConnectionsManager.getInstance().setConnectionStatus(connKey, true);
+						}
+		
+						@Override
+						public void onFailure(Throwable value) {
+							connectFailed = true;
+							ConnectionsManager.getInstance().setConnectionStatus(connKey, false);
+						}
+					});
+				} catch (Exception e) {
+					logger.log(Priority.ERROR, e.getMessage(), e);
 				}
-				
-				connection.connect(new Callback<Void>() {
-					@Override
-					public void onSuccess(Void value) {
-						Topic[] topics = new Topic[1];
-						if(qos < 0 || qos > 2) {
-							logger.error("Specified invalid QoS value, set to default QoS value " + qos);
-							qos = QOS_0;
-						}
-						if (qos == QOS_0) {
-							topics[0] = new Topic(topicName, QoS.AT_MOST_ONCE);
-						} else if (qos == QOS_1) {
-							topics[0] = new Topic(topicName, QoS.AT_LEAST_ONCE);
-						} else {
-							topics[0] = new Topic(topicName, QoS.EXACTLY_ONCE);
-						}
-	
-						connection.subscribe(topics, new Callback<byte[]>() {
-							@Override
-							public void onSuccess(byte[] value) {
-								logger.info("sub successful, topic is " + topicName);
-							}
-	
-							@Override
-							public void onFailure(Throwable value) {
-								subFailed = true;
-								connection.kill(null);
-							}
-						});
-					}
-	
-					@Override
-					public void onFailure(Throwable value) {
-						connectFailed = true;
-					}
-				});
-			} catch (Exception e) {
-				logger.log(Priority.ERROR, e.getMessage(), e);
+			
 			}
-		} 
+		}
 		
 		SampleResult result = new SampleResult();
 		result.setSampleLabel(getName());
 		
-		result.sampleStart();
-		
 		if (connectFailed) {
-			return fillFailedResult(result, MessageFormat.format("Connection {0} connected failed.", connection));
+			result.sampleStart();
+			return fillFailedResult(sampleByTime, result, "Connection failed.");
 		} else if (subFailed) {
-			return fillFailedResult(result, "Failed to subscribe to topic.");
+			result.sampleStart();
+			return fillFailedResult(sampleByTime, result, "Failed to subscribe to topic.");
 		} else if (receivedMsgFailed) {
-			return fillFailedResult(result, "Failed to receive message.");
+			result.sampleStart();
+			return fillFailedResult(sampleByTime, result, "Failed to receive message.");
 		}
-
-		synchronized (lock) {
-			
-			if(sampleByTime) {
-				try {
-					lock.wait();
-				} catch (InterruptedException e) {
-					logger.info("Received exception when waiting for notification signal: " + e.getMessage());
-				}
-			} else {
-				int receivedCount = (batches.isEmpty() ? 0 : batches.element().getReceivedCount());;
+		
+		if(sampleByTime) {
+			try {
+				TimeUnit.MILLISECONDS.sleep(Long.parseLong(getSampleElapsedTime()));
+			} catch (InterruptedException e) {
+				logger.info("Received exception when waiting for notification signal: " + e.getMessage());
+			}
+			synchronized (dataLock) {
+				result.sampleStart();
+				return produceResult(result);	
+			}
+		} else {
+			synchronized (dataLock) {
+				int receivedCount1 = (batches.isEmpty() ? 0 : batches.element().getReceivedCount());;
 				boolean needWait = false;
-				if(receivedCount < sampleCount) {
+				if(receivedCount1 < sampleCount) {
 					needWait = true;
 				}
 				
 				//logger.info(System.currentTimeMillis() + ": need wait? receivedCount=" + receivedCount + ", sampleCount=" + sampleCount);
 				if(needWait) {
 					try {
-						lock.wait();
+						dataLock.wait();
 					} catch (InterruptedException e) {
 						logger.info("Received exception when waiting for notification signal: " + e.getMessage());
 					}
 				}
+				result.sampleStart();
+				return produceResult(result);
 			}
-			
-			SubBean bean = batches.poll();
-			if(bean == null) { //In case selected with time interval
-				bean = new SubBean();
-			}
-			int receivedCount = bean.getReceivedCount();
-			List<String> contents = bean.getContents();
-			String message = MessageFormat.format("Received {0} of message\n.", receivedCount);
-			StringBuffer content = new StringBuffer("");
-			if (isDebugResponse()) {
-				for (int i = 0; i < contents.size(); i++) {
-					content.append(contents.get(i) + " \n");
-				}
-			}
-			result = fillOKResult(result, bean.getReceivedMessageSize(), message, content.toString());
-			
-			if(receivedCount == 0) {
-				result.setEndTime(result.getStartTime());
-			} else {
-				if (isAddTimestamp()) {
-					result.setEndTime(result.getStartTime() + (long) bean.getAvgElapsedTime());
-				} else {
-					result.setEndTime(result.getStartTime());	
-				}
-			}
-			result.setSampleCount(receivedCount);
-
-			return result;
 		}
 	}
+	
+	private SampleResult produceResult(SampleResult result) {
+		SubBean bean = batches.poll();
+		if(bean == null) { //In case selected with time interval
+			bean = new SubBean();
+		}
+		int receivedCount = bean.getReceivedCount();
+		List<String> contents = bean.getContents();
+		String message = MessageFormat.format("Received {0} of message\n.", receivedCount);
+		StringBuffer content = new StringBuffer("");
+		if (isDebugResponse()) {
+			for (int i = 0; i < contents.size(); i++) {
+				content.append(contents.get(i) + " \n");
+			}
+		}
+		result = fillOKResult(result, bean.getReceivedMessageSize(), message, content.toString());
+		
+		if(receivedCount == 0) {
+			result.setEndTime(result.getStartTime());
+		} else {
+			if (isAddTimestamp()) {
+				result.setEndTime(result.getStartTime() + (long) bean.getAvgElapsedTime());
+				result.setLatency((long) bean.getAvgElapsedTime());
+			} else {
+				result.setEndTime(result.getStartTime());	
+			}
+		}
+		result.setSampleCount(receivedCount);
 
-	private SampleResult fillFailedResult(SampleResult result, String message) {
+		return result;
+	}
+	
+	private void listenToTopics(final String topicName) {
+		try {
+			qos = Integer.parseInt(getQOS());
+		} catch(Exception ex) {
+			logger.error(MessageFormat.format("Specified invalid QoS value {0}, set to default QoS value {1}!", ex.getMessage(), qos));
+			qos = QOS_0;
+		}
+		
+		final String[] paraTopics = topicName.split(",");
+		
+		Topic[] topics = new Topic[paraTopics.length];
+		if(qos < 0 || qos > 2) {
+			logger.error("Specified invalid QoS value, set to default QoS value " + qos);
+			qos = QOS_0;
+		}
+		for(int i = 0; i < topics.length; i++) {
+			if (qos == QOS_0) {
+				topics[i] = new Topic(paraTopics[i], QoS.AT_MOST_ONCE);
+			} else if (qos == QOS_1) {
+				topics[i] = new Topic(paraTopics[i], QoS.AT_LEAST_ONCE);
+			} else {
+				topics[i] = new Topic(paraTopics[i], QoS.EXACTLY_ONCE);
+			}
+		}
+
+		connection.subscribe(topics, new Callback<byte[]>() {
+			@Override
+			public void onSuccess(byte[] value) {
+				logger.info("sub successful, topic length is " + paraTopics.length);
+			}
+
+			@Override
+			public void onFailure(Throwable value) {
+				subFailed = true;
+				connection.kill(null);
+			}
+		});
+	}
+	
+	private void setListener(final boolean sampleByTime, final int sampleCount) {
+		connection.listener(new Listener() {
+			@Override
+			public void onPublish(UTF8Buffer topic, Buffer body, Runnable ack) {
+				try {
+					ByteArrayOutputStream baos = new ByteArrayOutputStream();
+					body.writeTo(baos);
+					String msg = baos.toString();
+					ack.run();
+					
+					if(sampleByTime) {
+						synchronized (dataLock) {
+							handleSubBean(sampleByTime, msg, sampleCount);
+						}
+					} else {
+						synchronized (dataLock) {
+							SubBean bean = handleSubBean(sampleByTime, msg, sampleCount);
+							//logger.info(System.currentTimeMillis() + ": need notify? receivedCount=" + bean.getReceivedCount() + ", sampleCount=" + sampleCount);
+							if(bean.getReceivedCount() == sampleCount) {
+								dataLock.notify();
+							}
+						}
+					}
+				} catch (IOException e) {
+					logger.log(Priority.ERROR, e.getMessage(), e);
+				}
+			}
+
+			@Override
+			public void onFailure(Throwable value) {
+				connectFailed = true;
+				connection.kill(null);
+			}
+
+			@Override
+			public void onDisconnected() {
+			}
+
+			@Override
+			public void onConnected() {
+			}
+		});
+	}
+	
+	private SubBean handleSubBean(boolean sampleByTime, String msg, int sampleCount) {
+		SubBean bean = null;
+		if(batches.isEmpty()) {
+			bean = new SubBean();
+			batches.add(bean);
+		} else {
+			SubBean[] beans = new SubBean[batches.size()];
+			batches.toArray(beans);
+			bean = beans[beans.length - 1];
+		}
+		
+		if((!sampleByTime) && (bean.getReceivedCount() == sampleCount)) { //Create a new batch when latest bean is full.
+			logger.info("The tail bean is full, will create a new bean for it.");
+			bean = new SubBean();
+			batches.add(bean);
+		}
+		if (isAddTimestamp()) {
+			long now = System.currentTimeMillis();
+			int index = msg.indexOf(TIME_STAMP_SEP_FLAG);
+			if (index == -1 && (!printFlag)) {
+				logger.info("Payload does not include timestamp: " + msg);
+				printFlag = true;
+			} else if (index != -1) {
+				long start = Long.parseLong(msg.substring(0, index));
+				long elapsed = now - start;
+				
+				double avgElapsedTime = bean.getAvgElapsedTime();
+				int receivedCount = bean.getReceivedCount();
+				avgElapsedTime = (avgElapsedTime * receivedCount + elapsed) / (receivedCount + 1);
+				bean.setAvgElapsedTime(avgElapsedTime);
+			}
+		}
+		if (isDebugResponse()) {
+			bean.getContents().add(msg);
+		}
+		bean.setReceivedMessageSize(bean.getReceivedMessageSize() + msg.length());
+		bean.setReceivedCount(bean.getReceivedCount() + 1);
+		return bean;
+	}
+
+	private SampleResult fillFailedResult(boolean sampleByTime, SampleResult result, String message) {
 		result.setResponseCode("500");
 		result.setSuccessful(false);
 		result.setResponseMessage(message);
-		result.setResponseData("Failed.".getBytes());
+		result.setResponseData(message.getBytes());
 		result.setEndTime(result.getStartTime());
+		
+		if(sampleByTime) {
+			try {
+				TimeUnit.MILLISECONDS.sleep(Long.parseLong(getSampleElapsedTime()));
+			} catch (InterruptedException e) {
+				logger.info("Received exception when waiting for notification signal: " + e.getMessage());
+			}
+		}
 		return result;
 	}
 
@@ -378,39 +438,11 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 			logger.info("Configured with sampled on message count, will not check message sent time.");
 			return;
 		}
-		
-		final long sampleElapsedTime = Long.parseLong(getSampleElapsedTime());
-		
-		ExecutorService executor = Executors.newSingleThreadExecutor();
-		executor.submit(new Runnable() {
-			@Override
-			public void run() {
-				while(true) {
-					try {
-						//logger.info(System.currentTimeMillis() + ", sampleElapsedTime = " + sampleElapsedTime);
-						if(threadFinished.get()) {
-							synchronized (lock) {
-								lock.notify();
-							}
-							break;
-						}
-						TimeUnit.MILLISECONDS.sleep(sampleElapsedTime);
-						synchronized (lock) {
-							lock.notify();
-						}
-					} catch (Exception e) {
-						logger.log(Priority.ERROR, e.getMessage());
-					} 
-				}
-			}
-		});
-		executor.shutdown();
 	}
 	
 	@Override
 	public void threadFinished() {
 		//logger.info(System.currentTimeMillis() + ", threadFinished");
-		threadFinished.set(true);
 		//logger.info("*** in threadFinished");
 		this.connection.disconnect(new Callback<Void>() {
 			@Override
@@ -423,5 +455,8 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 				logger.info(MessageFormat.format("Connection {0} failed to disconnect.", connection));
 			}
 		});
+		if(ConnectionsManager.getInstance().containsConnection(connKey)) {
+			ConnectionsManager.getInstance().removeConnection(connKey);	
+		}
 	}
 }

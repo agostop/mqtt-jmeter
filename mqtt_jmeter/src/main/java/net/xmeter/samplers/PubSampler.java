@@ -11,8 +11,8 @@ import org.apache.jmeter.testelement.ThreadListener;
 import org.apache.jorphan.logging.LoggingManager;
 import org.apache.log.Logger;
 import org.apache.log.Priority;
-import org.fusesource.mqtt.client.Future;
-import org.fusesource.mqtt.client.FutureConnection;
+import org.fusesource.mqtt.client.Callback;
+import org.fusesource.mqtt.client.CallbackConnection;
 import org.fusesource.mqtt.client.MQTT;
 import org.fusesource.mqtt.client.QoS;
 
@@ -25,11 +25,12 @@ public class PubSampler extends AbstractMQTTSampler implements ThreadListener {
 	private static final long serialVersionUID = -4312341622759500786L;
 	private transient static Logger logger = LoggingManager.getLoggerForClass();
 	private transient MQTT mqtt = new MQTT();
-	private transient FutureConnection connection = null;
+	private transient CallbackConnection connection = null;
 	private String payload = null;
 	private String clientId = "";
 	private QoS qos_enum = QoS.AT_MOST_ONCE;
 	private String topicName = "";
+	private String connKey = "";
 
 	public String getQOS() {
 		return getPropertyAsString(QOS_LEVEL, String.valueOf(QOS_0));
@@ -88,62 +89,85 @@ public class PubSampler extends AbstractMQTTSampler implements ThreadListener {
 	}
 	
 	@Override
+	public boolean isConnectionShareShow() {
+		return true;
+	}
+	
+	private String getKey() {
+		String key = getThreadName();
+		if(!isConnectionShare()) {
+			key = new String(getThreadName() + this.hashCode());
+		}
+		return key;
+	}
+	
+	@Override
 	public SampleResult sample(Entry arg0) {
-		if (connection == null) { // first loop, do initialization
-			try {
-				if (!DEFAULT_PROTOCOL.equals(getProtocol())) {
-					mqtt.setSslContext(Util.getContext(this));
-				}
-				
-				mqtt.setVersion(getMqttVersion());
-				mqtt.setHost(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort());
-				mqtt.setKeepAlive((short) Integer.parseInt(getConnKeepAlive()));
+		this.connKey = getKey();
+		if(connection == null) {
+			connection = ConnectionsManager.getInstance().getConnection(connKey);
+			if(connection != null) {
+				logger.info("Use the shared connection: " + connection);
+			} else {
+				try {
+					if (!DEFAULT_PROTOCOL.equals(getProtocol())) {
+						mqtt.setSslContext(Util.getContext(this));
+					}
+					
+					mqtt.setVersion(getMqttVersion());
+					mqtt.setHost(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort());
+					mqtt.setKeepAlive((short) Integer.parseInt(getConnKeepAlive()));
 
-				if(isClientIdSuffix()) {
-					clientId = Util.generateClientId(getConnPrefix());
-				} else {
-					clientId = getConnPrefix();
-				}
-				mqtt.setClientId(clientId);
+					if(isClientIdSuffix()) {
+						clientId = Util.generateClientId(getConnPrefix());
+					} else {
+						clientId = getConnPrefix();
+					}
+					mqtt.setClientId(clientId);
 
-				mqtt.setConnectAttemptsMax(Integer.parseInt(getConnAttamptMax()));
-				mqtt.setReconnectAttemptsMax(Integer.parseInt(getConnReconnAttamptMax()));
+					mqtt.setConnectAttemptsMax(Integer.parseInt(getConnAttamptMax()));
+					mqtt.setReconnectAttemptsMax(Integer.parseInt(getConnReconnAttamptMax()));
 
-				if (!"".equals(getUserNameAuth().trim())) {
-					mqtt.setUserName(getUserNameAuth());
-				}
-				if (!"".equals(getPasswordAuth().trim())) {
-					mqtt.setPassword(getPasswordAuth());
-				}
-				if (MESSAGE_TYPE_RANDOM_STR_WITH_FIX_LEN.equals(getMessageType())) {
-					payload = Util.generatePayload(Integer.parseInt(getMessageLength()));
-				}
+					if (!"".equals(getUserNameAuth().trim())) {
+						mqtt.setUserName(getUserNameAuth());
+					}
+					if (!"".equals(getPasswordAuth().trim())) {
+						mqtt.setPassword(getPasswordAuth());
+					}
 
-				int qos = Integer.parseInt(getQOS());
-				switch (qos) {
-				case 0:
-					qos_enum = QoS.AT_MOST_ONCE;
-					break;
-				case 1:
-					qos_enum = QoS.AT_LEAST_ONCE;
-					break;
-				case 2:
-					qos_enum = QoS.EXACTLY_ONCE;
-					break;
-				default:
-					break;
+					Object connLock = new Object();
+					connection = ConnectionsManager.getInstance().createConnection(connKey, mqtt);
+					synchronized (connLock) {
+						ConnectionCallback callback = new ConnectionCallback(connection, connLock);
+						connection.connect(callback);
+						connLock.wait(TimeUnit.SECONDS.toMillis(Integer.parseInt(getConnTimeout())));
+						ConnectionsManager.getInstance().setConnectionStatus(connKey, callback.isConnectionSucc());
+					}
+				} catch (Exception e) {
+					logger.log(Priority.ERROR, e.getMessage(), e);
+					ConnectionsManager.getInstance().setConnectionStatus(connKey, false);
 				}
-
-				connection = mqtt.futureConnection();
-				Future<Void> f1 = connection.connect();
-				f1.await(Integer.parseInt(getConnTimeout()), TimeUnit.SECONDS);
-			} catch (Exception e) {
-				logger.log(Priority.ERROR, e.getMessage(), e);
+			}
+		}
+		
+		if(payload == null) {
+			if (MESSAGE_TYPE_RANDOM_STR_WITH_FIX_LEN.equals(getMessageType())) {
+				payload = Util.generatePayload(Integer.parseInt(getMessageLength()));
 			}
 		}
 		
 		SampleResult result = new SampleResult();
 		result.setSampleLabel(getName());
+		
+		if(!ConnectionsManager.getInstance().getConnectionStatus(connKey)) {
+			result.sampleStart();
+			result.setSuccessful(false);
+			result.sampleEnd();
+			result.setResponseMessage(MessageFormat.format("Publish failed for connection {0}.", connection));
+			result.setResponseData("Publish failed becasue the connection has not been established.".getBytes());
+			result.setResponseCode("500");
+			return result;
+		}
 		try {
 			byte[] toSend = new byte[]{};
 			byte[] tmp = new byte[]{};
@@ -156,6 +180,22 @@ public class PubSampler extends AbstractMQTTSampler implements ThreadListener {
 				tmp = payload.getBytes();
 			}
 
+			
+			int qos = Integer.parseInt(getQOS());
+			switch (qos) {
+			case 0:
+				qos_enum = QoS.AT_MOST_ONCE;
+				break;
+			case 1:
+				qos_enum = QoS.AT_LEAST_ONCE;
+				break;
+			case 2:
+				qos_enum = QoS.EXACTLY_ONCE;
+				break;
+			default:
+				break;
+			}
+			
 			topicName = getTopic();
 			if (isAddTimestamp()) {
 				byte[] timePrefix = (System.currentTimeMillis() + TIME_STAMP_SEP_FLAG).getBytes();
@@ -167,21 +207,44 @@ public class PubSampler extends AbstractMQTTSampler implements ThreadListener {
 				System.arraycopy(tmp, 0, toSend, 0 , tmp.length);
 			}
 			result.sampleStart();
-
-			Future<Void> pub = connection.publish(topicName, toSend, qos_enum, false);
-			pub.await();
-
+			
+			final Object connLock = new Object();
+			PubCallback pubCallback = new PubCallback(connLock);
+			
+			if(qos_enum == QoS.AT_MOST_ONCE) { 
+				//For QoS == 0, the callback is the same thread with sampler thread, so it cannot use the lock object wait() & notify() in else block;
+				//Otherwise the sampler thread will be blocked.
+				connection.publish(topicName, toSend, qos_enum, false, pubCallback);
+			} else {
+				synchronized (connLock) {
+					connection.publish(topicName, toSend, qos_enum, false, pubCallback);
+					connLock.wait();
+				}
+			}
+			
 			result.sampleEnd();
-			result.setSuccessful(true);
-			result.setResponseData((MessageFormat.format("Publish Successful by {0}.", clientId)).getBytes());
-			result.setResponseMessage(MessageFormat.format("publish successfully via Connection {0}.", connection));
-			result.setResponseCodeOK();
+			result.setSamplerData(new String(toSend));
+			result.setSentBytes(toSend.length);
+			result.setLatency(result.getEndTime() - result.getStartTime());
+			result.setSuccessful(pubCallback.isSuccessful());
+			
+			if(pubCallback.isSuccessful()) {
+				result.setResponseData("Publish successfuly.".getBytes());
+				result.setResponseMessage(MessageFormat.format("publish successfully for Connection {0}.", connection));
+				result.setResponseCodeOK();	
+			} else {
+				result.setSuccessful(false);
+				result.setResponseMessage(MessageFormat.format("Publish failed for connection {0}.", connection));
+				result.setResponseData("Publish failed.".getBytes());
+				result.setResponseCode("500");
+			}
 		} catch (Exception ex) {
 			logger.log(Priority.ERROR, ex.getMessage(), ex);
 			result.sampleEnd();
+			result.setLatency(result.getEndTime() - result.getStartTime());
 			result.setSuccessful(false);
 			result.setResponseMessage(MessageFormat.format("Publish failed for connection {0}.", connection));
-			result.setResponseData("Failed.".getBytes());
+			result.setResponseData(ex.getMessage().getBytes());
 			result.setResponseCode("500");
 		}
 		return result;
@@ -195,8 +258,21 @@ public class PubSampler extends AbstractMQTTSampler implements ThreadListener {
 	@Override
 	public void threadFinished() {
 		if (this.connection != null) {
-			this.connection.disconnect();
-			logger.info(MessageFormat.format("The connection {0} disconneted successfully.", connection));
+			this.connection.disconnect(new Callback<Void>() {
+				
+				@Override
+				public void onSuccess(Void value) {
+					logger.info(MessageFormat.format("The connection {0} disconneted successfully.", connection));		
+				}
+				
+				@Override
+				public void onFailure(Throwable value) {
+					logger.log(Priority.ERROR, value.getMessage(), value);
+				}
+			});
+		}
+		if(ConnectionsManager.getInstance().containsConnection(connKey)) {
+			ConnectionsManager.getInstance().removeConnection(connKey);	
 		}
 	}
 }
