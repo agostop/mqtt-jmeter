@@ -120,7 +120,7 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 		JPanel pPanel = new HorizontalPanel();
 		//pPanel.setLayout(new GridLayout(1, 2));
 
-		protocols = new JLabeledChoice("Protocols:", new String[] { "TCP", "SSL" }, true, false);
+		protocols = new JLabeledChoice("Protocols:", new String[] { "TCP", "SSL", "WS", "WSS" }, true, false);
 		//JComboBox<String> component = (JComboBox) protocols.getComponentList().get(1);
 		//component.setSize(new Dimension(40, component.getHeight()));
 		protocols.addChangeListener(this);
