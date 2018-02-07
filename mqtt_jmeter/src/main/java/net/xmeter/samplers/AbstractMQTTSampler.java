@@ -9,6 +9,12 @@ public abstract class AbstractMQTTSampler extends AbstractSampler implements Con
 	 * 
 	 */
 	private static final long serialVersionUID = 7163793218595455807L;
+//	
+//	public enum QoS {
+//	    AT_MOST_ONCE,
+//	    AT_LEAST_ONCE,
+//	    EXACTLY_ONCE
+//	}
 
 	public String getServer() {
 		return getPropertyAsString(SERVER, DEFAULT_SERVER);

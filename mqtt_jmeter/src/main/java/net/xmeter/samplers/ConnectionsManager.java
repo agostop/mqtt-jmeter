@@ -2,11 +2,10 @@ package net.xmeter.samplers;
 
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.fusesource.mqtt.client.CallbackConnection;
-import org.fusesource.mqtt.client.MQTT;
+import org.eclipse.paho.client.mqttv3.IMqttAsyncClient;
 
 public class ConnectionsManager {
-	private ConcurrentHashMap<String, CallbackConnection> connections = new ConcurrentHashMap<>();
+	private ConcurrentHashMap<String, IMqttAsyncClient> connections = new ConcurrentHashMap<>();
 	private ConcurrentHashMap<String, Boolean> connectionsStatus = new ConcurrentHashMap<>();
 	
 	private static ConnectionsManager connectionsManager = new ConnectionsManager();
@@ -18,13 +17,13 @@ public class ConnectionsManager {
 		return connectionsManager;
 	}
 	
-	public CallbackConnection createConnection(String key, MQTT mqtt) {
-		CallbackConnection conn = mqtt.callbackConnection();
-		connections.put(key, conn);
-		return conn;
+	public IMqttAsyncClient createConnection(String key, IMqttAsyncClient mqtt) {
+		//CallbackConnection conn = mqtt.callbackConnection();
+		connections.put(key, mqtt);
+		return mqtt;
 	}
 	
-	public CallbackConnection getConnection(String key) {
+	public IMqttAsyncClient getConnection(String key) {
 		return this.connections.get(key);
 	}
 	

@@ -1,7 +1,5 @@
 package net.xmeter.samplers;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.text.MessageFormat;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -13,22 +11,23 @@ import org.apache.jmeter.testelement.ThreadListener;
 import org.apache.jorphan.logging.LoggingManager;
 import org.apache.log.Logger;
 import org.apache.log.Priority;
-import org.fusesource.hawtbuf.Buffer;
-import org.fusesource.hawtbuf.UTF8Buffer;
-import org.fusesource.mqtt.client.Callback;
-import org.fusesource.mqtt.client.CallbackConnection;
-import org.fusesource.mqtt.client.Listener;
-import org.fusesource.mqtt.client.MQTT;
-import org.fusesource.mqtt.client.QoS;
-import org.fusesource.mqtt.client.Topic;
+import org.eclipse.paho.client.mqttv3.IMqttActionListener;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
 
 import net.xmeter.SubBean;
 import net.xmeter.Util;
 
 @SuppressWarnings("deprecation")
 public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
-	private transient MQTT mqtt = new MQTT();
-	private transient CallbackConnection connection = null;
+	//private transient MQTT mqtt = new MQTT();
+	//private transient MqttAsyncClient mqtt = null;
+	private transient MqttAsyncClient connection = null;
 	private transient static Logger logger = LoggingManager.getLoggerForClass();
 
 	private boolean connectFailed = false;
@@ -145,7 +144,7 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 		final int sampleCount = Integer.parseInt(getSampleCount());
 		connKey = getKey();
 		if(connection == null) {
-			connection = ConnectionsManager.getInstance().getConnection(connKey);
+			connection = (MqttAsyncClient) ConnectionsManager.getInstance().getConnection(connKey);
 			final String topicName= getTopic();
 			if(connection != null) {
 				logger.info("Use the shared connection: " + connection);
@@ -154,13 +153,11 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 			} else {
 				 // first loop, initializing ..
 				try {
-					if (!DEFAULT_PROTOCOL.equals(getProtocol())) {
-						mqtt.setSslContext(Util.getContext(this));
-					}
-					
-					mqtt.setHost(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort());
-					mqtt.setVersion(getMqttVersion());
-					mqtt.setKeepAlive((short) Integer.parseInt(getConnKeepAlive()));
+					//mqtt.setVersion(getMqttVersion());
+					//mqtt.setKeepAlive((short) Integer.parseInt(getConnKeepAlive()));
+					MqttConnectOptions options = new MqttConnectOptions();
+					options.setKeepAliveInterval(Integer.parseInt(getConnKeepAlive()));
+					options.setAutomaticReconnect(Integer.parseInt(getConnAttamptMax()) > 0);
 		
 					String clientId = null;
 					if(isClientIdSuffix()) {
@@ -168,33 +165,35 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 					} else {
 						clientId = getConnClientId();
 					}
-					mqtt.setClientId(clientId);
-		
-					mqtt.setConnectAttemptsMax(Integer.parseInt(getConnAttamptMax()));
-					mqtt.setReconnectAttemptsMax(Integer.parseInt(getConnReconnAttamptMax()));
-		
+					
 					if (!"".equals(getUserNameAuth().trim())) {
-						mqtt.setUserName(getUserNameAuth());
+						options.setUserName(getUserNameAuth());
 					}
 					if (!"".equals(getPasswordAuth().trim())) {
-						mqtt.setPassword(getPasswordAuth());
+						options.setPassword(getPasswordAuth().toCharArray());
 					}
 					
-					connection = ConnectionsManager.getInstance().createConnection(connKey, mqtt);
+					MqttAsyncClient mqtt = new MqttAsyncClient(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort(), clientId);
+					
+					connection = (MqttAsyncClient) ConnectionsManager.getInstance().createConnection(connKey, mqtt);
 					setListener(sampleByTime, sampleCount);
-					connection.connect(new Callback<Void>() {
+					connection.connect(options, null, new IMqttActionListener() {
+
 						@Override
-						public void onSuccess(Void value) {
+						public void onSuccess(IMqttToken asyncActionToken) {
 							listenToTopics(topicName);
 							ConnectionsManager.getInstance().setConnectionStatus(connKey, true);
+							
 						}
-		
+
 						@Override
-						public void onFailure(Throwable value) {
+						public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
 							connectFailed = true;
 							ConnectionsManager.getInstance().setConnectionStatus(connKey, false);
 						}
+						
 					});
+					
 				} catch (Exception e) {
 					logger.log(Priority.ERROR, e.getMessage(), e);
 				}
@@ -288,7 +287,25 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 		}
 		
 		final String[] paraTopics = topicName.split(",");
-		
+		try {
+			connection.subscribe(paraTopics, new int[] { qos }, null, new IMqttActionListener() {
+
+				@Override
+				public void onSuccess(IMqttToken asyncActionToken) {
+					logger.info("sub successful, topic length is " + paraTopics.length);
+
+				}
+
+				@Override
+				public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+					subFailed = true;
+					//connection.kill(null);
+				}
+			});
+		} catch (MqttException e) {
+			logger.error("subscribe error: " + e);
+		}
+		/*
 		Topic[] topics = new Topic[paraTopics.length];
 		if(qos < 0 || qos > 2) {
 			logger.error("Specified invalid QoS value, set to default QoS value " + qos);
@@ -303,22 +320,44 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 				topics[i] = new Topic(paraTopics[i], QoS.EXACTLY_ONCE);
 			}
 		}
+		*/
 
-		connection.subscribe(topics, new Callback<byte[]>() {
-			@Override
-			public void onSuccess(byte[] value) {
-				logger.info("sub successful, topic length is " + paraTopics.length);
-			}
-
-			@Override
-			public void onFailure(Throwable value) {
-				subFailed = true;
-				connection.kill(null);
-			}
-		});
 	}
 	
 	private void setListener(final boolean sampleByTime, final int sampleCount) {
+		
+		connection.setCallback(new MqttCallback() {
+			
+			@Override
+			public void messageArrived(String topic, MqttMessage message) throws Exception {
+				if(sampleByTime) {
+					synchronized (dataLock) {
+						handleSubBean(sampleByTime, new String(message.getPayload()), sampleCount);
+					}
+				} else {
+					synchronized (dataLock) {
+						SubBean bean = handleSubBean(sampleByTime, new String(message.getPayload()), sampleCount);
+						//logger.info(System.currentTimeMillis() + ": need notify? receivedCount=" + bean.getReceivedCount() + ", sampleCount=" + sampleCount);
+						if(bean.getReceivedCount() == sampleCount) {
+							dataLock.notify();
+						}
+					}
+				}
+			}
+			
+			@Override
+			public void deliveryComplete(IMqttDeliveryToken token) {
+				
+			}
+			
+			@Override
+			public void connectionLost(Throwable cause) {
+				connectFailed = true;
+				//connection.kill(null);
+			}
+		});
+		
+		/*
 		connection.listener(new Listener() {
 			@Override
 			public void onPublish(UTF8Buffer topic, Buffer body, Runnable ack) {
@@ -360,6 +399,7 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 			public void onConnected() {
 			}
 		});
+		*/
 	}
 	
 	private SubBean handleSubBean(boolean sampleByTime, String msg, int sampleCount) {
@@ -444,6 +484,24 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 	public void threadFinished() {
 		//logger.info(System.currentTimeMillis() + ", threadFinished");
 		//logger.info("*** in threadFinished");
+		try {
+			this.connection.disconnect(null, new IMqttActionListener() {
+				
+				@Override
+				public void onSuccess(IMqttToken asyncActionToken) {
+					logger.info(MessageFormat.format("Connection {0} disconnect successfully.", connection));
+				}
+				
+				@Override
+				public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+					logger.info(MessageFormat.format("Connection {0} failed to disconnect.", connection));
+				}
+			});
+		} catch (MqttException e) {
+			logger.error("disconnect error: " + e);
+		}
+		
+		/*
 		this.connection.disconnect(new Callback<Void>() {
 			@Override
 			public void onSuccess(Void value) {
@@ -455,6 +513,8 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 				logger.info(MessageFormat.format("Connection {0} failed to disconnect.", connection));
 			}
 		});
+		*/
+		
 		if(ConnectionsManager.getInstance().containsConnection(connKey)) {
 			ConnectionsManager.getInstance().removeConnection(connKey);	
 		}

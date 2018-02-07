@@ -5,6 +5,13 @@
 	<artifactId>mqtt-jmeter</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 
+	<repositories>
+		<repository>
+			<id>Eclipse Paho Repo</id>
+			<url>https://repo.eclipse.org/content/repositories/paho-releases/</url>
+		</repository>
+	</repositories>
+
 	<properties>
 		<jmeter-version>3.1</jmeter-version>
 	</properties>
@@ -34,6 +41,12 @@
 			<groupId>org.fusesource.mqtt-client</groupId>
 			<artifactId>mqtt-client</artifactId>
 			<version>1.14</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.eclipse.paho</groupId>
+			<artifactId>org.eclipse.paho.client.mqttv3</artifactId>
+			<version>1.2.0</version>
 		</dependency>
 	</dependencies>
 
