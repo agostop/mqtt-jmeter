@@ -54,7 +54,8 @@ public class ConnectionSampler extends AbstractMQTTSampler
 			}
 			
 			mqtt.setHost(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort());
-			mqtt.setVersion(getMqttVersion());
+			//mqtt.setVersion(getMqttVersion());
+			mqtt.setVersion(MQTT_VERSION_3_1);
 			mqtt.setKeepAlive((short) Integer.parseInt(getConnKeepAlive()));
 			
 			String clientId = null;

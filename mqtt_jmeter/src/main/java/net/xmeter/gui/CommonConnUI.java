@@ -21,6 +21,7 @@ import org.apache.jmeter.gui.util.VerticalPanel;
 import org.apache.jmeter.util.JMeterUtils;
 import org.apache.jorphan.gui.JLabeledChoice;
 import org.apache.jorphan.gui.JLabeledTextField;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 
 import net.xmeter.Constants;
 import net.xmeter.samplers.AbstractMQTTSampler;
@@ -278,9 +279,9 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 		}
 		reconnAttmptMax.setText(sampler.getConnReconnAttamptMax());
 		serverAddr.setText(sampler.getServer());
-		if(sampler.getMqttVersion().equals(MQTT_VERSION_3_1)) {
+		if(sampler.getMqttVersion() == MqttConnectOptions.MQTT_VERSION_3_1) {
 			mqttVersion.setSelectedIndex(0);
-		} else if(sampler.getMqttVersion().equals(MQTT_VERSION_3_1_1)) {
+		} else if(sampler.getMqttVersion() == MqttConnectOptions.MQTT_VERSION_3_1_1) {
 			mqttVersion.setSelectedIndex(1);
 		}
 		serverPort.setText(sampler.getPort());

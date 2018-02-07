@@ -1,6 +1,7 @@
 package net.xmeter.samplers;
 
 import org.apache.jmeter.samplers.AbstractSampler;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 
 import net.xmeter.Constants;
 
@@ -24,8 +25,8 @@ public abstract class AbstractMQTTSampler extends AbstractSampler implements Con
 		setProperty(SERVER, server);
 	}
 	
-	public String getMqttVersion() {
-		return getPropertyAsString(MQTT_VERSION, DEFAULT_MQTT_VERSION);
+	public int getMqttVersion() {
+		return getPropertyAsInt(MQTT_VERSION, MqttConnectOptions.MQTT_VERSION_3_1);
 	}
 	
 	public void setMqttVersion(String version) {

@@ -158,6 +158,8 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 					MqttConnectOptions options = new MqttConnectOptions();
 					options.setKeepAliveInterval(Integer.parseInt(getConnKeepAlive()));
 					options.setAutomaticReconnect(Integer.parseInt(getConnAttamptMax()) > 0);
+					options.setMqttVersion(getMqttVersion());
+					options.setConnectionTimeout(Integer.parseInt(getConnTimeout()));
 		
 					String clientId = null;
 					if(isClientIdSuffix()) {

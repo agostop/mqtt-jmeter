@@ -116,6 +116,8 @@ public class PubSampler extends AbstractMQTTSampler implements ThreadListener {
 					//mqtt.setVersion(getMqttVersion());
 					MqttConnectOptions options = new MqttConnectOptions();
 					options.setKeepAliveInterval(Integer.parseInt(getConnKeepAlive()));
+					options.setMqttVersion(getMqttVersion());
+					options.setConnectionTimeout(Integer.parseInt(getConnTimeout()));
 
 					if(isClientIdSuffix()) {
 						clientId = Util.generateClientId(getConnPrefix());
