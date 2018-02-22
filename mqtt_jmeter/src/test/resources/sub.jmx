@@ -92,6 +92,7 @@
           <stringProp name="mqtt.user_name"></stringProp>
           <stringProp name="mqtt.password"></stringProp>
           <stringProp name="mqtt.topic_name">${topic_name}</stringProp>
+          <stringProp name="mqtt.recv_timeout">${recv_timeout}</stringProp>
           <stringProp name="mqtt.qos_level">${QoS}</stringProp>
           <boolProp name="mqtt.add_timestamp">true</boolProp>
           <boolProp name="mqtt.debug_response">false</boolProp>

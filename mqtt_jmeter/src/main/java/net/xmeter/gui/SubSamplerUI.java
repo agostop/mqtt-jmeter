@@ -31,6 +31,7 @@ public class SubSamplerUI extends AbstractSamplerGui implements Constants, Chang
 	
 	private final JLabeledTextField sampleConditionValue = new JLabeledTextField("");
 	private final JLabeledTextField topicName = new JLabeledTextField("Topic name:");
+	private final JLabeledTextField recvTimeOut = new JLabeledTextField("Recv Time Out (ms):");
 	
 	private JCheckBox debugResponse = new JCheckBox("Debug response");
 	private JCheckBox timestamp = new JCheckBox("Payload includes timestamp");
@@ -67,10 +68,14 @@ public class SubSamplerUI extends AbstractSamplerGui implements Constants, Chang
 
 		qosChoice = new JLabeledChoice("QoS Level:", new String[] { String.valueOf(QOS_0), String.valueOf(QOS_1), String.valueOf(QOS_2) }, true, false);
 		sampleOnCondition = new JLabeledChoice("Sample on:", new String[] {SAMPLE_ON_CONDITION_OPTION1, SAMPLE_ON_CONDITION_OPTION2});
+		
+		recvTimeOut.setVisible(false);
+		recvTimeOut.setFont(null);
 
 		JPanel optsPanel1 = new HorizontalPanel();
 		optsPanel1.add(qosChoice);
 		optsPanel1.add(topicName);
+		optsPanel1.add(recvTimeOut);
 		optsPanel1.add(timestamp);
 		optsPanelCon.add(optsPanel1);
 		
@@ -121,7 +126,8 @@ public class SubSamplerUI extends AbstractSamplerGui implements Constants, Chang
 		if(SAMPLE_ON_CONDITION_OPTION1.equalsIgnoreCase(sampleOnCondition.getText())) {
 			this.sampleConditionValue.setText(sampler.getSampleElapsedTime());
 		} else if(SAMPLE_ON_CONDITION_OPTION2.equalsIgnoreCase(sampleOnCondition.getText())) {
-			this.sampleConditionValue.setText(sampler.getSampleCount());
+			this.sampleConditionValue.setText(sampler.getSampleCount().toString());
+			this.recvTimeOut.setText(sampler.getRecvTimeOut().toString());
 		}
 	}
 
@@ -166,6 +172,7 @@ public class SubSamplerUI extends AbstractSamplerGui implements Constants, Chang
 			sampler.setSampleElapsedTime(this.sampleConditionValue.getText());
 		} else if(SAMPLE_ON_CONDITION_OPTION2.equalsIgnoreCase(sampleOnCondition.getText())) {
 			sampler.setSampleCount(this.sampleConditionValue.getText());
+			sampler.setRecvTimeOut(this.recvTimeOut.getText());
 		}
 	}
 	
@@ -187,8 +194,12 @@ public class SubSamplerUI extends AbstractSamplerGui implements Constants, Chang
 		if(this.sampleOnCondition == e.getSource()) {
 			if(SAMPLE_ON_CONDITION_OPTION1.equalsIgnoreCase(sampleOnCondition.getText())) {
 				sampleConditionValue.setText(DEFAULT_SAMPLE_VALUE_ELAPSED_TIME_SEC);
+				recvTimeOut.setVisible(false);
+				recvTimeOut.setEnabled(false);
 			} else if(SAMPLE_ON_CONDITION_OPTION2.equalsIgnoreCase(sampleOnCondition.getText())) {
-				sampleConditionValue.setText(DEFAULT_SAMPLE_VALUE_COUNT);
+				sampleConditionValue.setText(DEFAULT_SAMPLE_VALUE_COUNT.toString());
+				recvTimeOut.setVisible(true);
+				recvTimeOut.setEnabled(true);
 			}
 		}
 	}

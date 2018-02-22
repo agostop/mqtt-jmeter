@@ -269,10 +269,29 @@ public class CommonConnUI implements ChangeListener, ActionListener, Constants{
 		cksPassword.setText(sampler.getKeyStorePassword());
 		
 		if(sampler.getProtocol().trim().indexOf(JMETER_VARIABLE_PREFIX) == -1){
+			/*
 			if(DEFAULT_PROTOCOL.equals(sampler.getProtocol())) {
 				protocols.setSelectedIndex(0);	
 			} else {
 				protocols.setSelectedIndex(1);
+			}
+			*/
+			switch (sampler.getProtocol()) {
+			case PROTOCOL_TCP_SSL:
+				protocols.setSelectedIndex(1);	
+				break;
+				
+			case PROTOCOL_WS:
+				protocols.setSelectedIndex(2);
+				break;
+				
+			case PROTOCOL_WS_SSL:
+				protocols.setSelectedIndex(3);
+				break;
+				
+			default:
+				protocols.setSelectedIndex(0);
+				break;
 			}
 		} else {
 			protocols.setText(sampler.getProtocol());

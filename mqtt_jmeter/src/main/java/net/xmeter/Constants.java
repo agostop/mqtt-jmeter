@@ -35,6 +35,7 @@ public interface Constants {
 	public static final String QOS_LEVEL = "mqtt.qos_level";
 	public static final String ADD_TIMESTAMP = "mqtt.add_timestamp";
 	public static final String PAYLOAD_SIZE = "mqtt.payload_size";
+	public static final String RECV_TIMEOUT = "mqtt.recv_timeout";
 	
 	public static final String SAMPLE_CONDITION_VALUE = "mqtt.sample_condition_value";
 	public static final String SAMPLE_CONDITION = "mqtt.sample_condition";
@@ -64,7 +65,10 @@ public interface Constants {
 	public static final String DEFAULT_MQTT_VERSION = "3.1";
 	public static final String DEFAULT_PORT = "1883";
 	public static final String DEFAULT_CONN_TIME_OUT = "10";
-	public static final String DEFAULT_PROTOCOL = "WSS";
+	public static final String DEFAULT_PROTOCOL = "TCP";
+	public static final String PROTOCOL_TCP_SSL= "SSL";
+	public static final String PROTOCOL_WS_SSL= "WSS";
+	public static final String PROTOCOL_WS= "WS";
 	public static final boolean DEFAULT_CONNECTION_SHARE = false;
 	
 	public static final String JMETER_VARIABLE_PREFIX = "${";
@@ -80,12 +84,14 @@ public interface Constants {
 	public static final String DEFAULT_CONN_ATTAMPT_MAX = "0";
 	public static final String DEFAULT_CONN_RECONN_ATTAMPT_MAX = "0";
 	
-	public static final String DEFAULT_SAMPLE_VALUE_COUNT = "1";
+	public static final Integer DEFAULT_SAMPLE_VALUE_COUNT = 1;
 	public static final String DEFAULT_SAMPLE_VALUE_ELAPSED_TIME_SEC = "1000";
 	
 	public static final boolean DEFAULT_ADD_TIMESTAMP = false;
 	public static final String DEFAULT_MESSAGE_FIX_LENGTH = "1024";
 	
 	public static final boolean DEFAULT_ADD_CLIENT_ID_SUFFIX = true;
+	
+	public static final int DEFAULT_RECV_TIMEOUT= 10000; //默认10秒后断开连接
 	
 }

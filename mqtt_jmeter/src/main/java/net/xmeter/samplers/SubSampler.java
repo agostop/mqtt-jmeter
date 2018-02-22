@@ -20,6 +20,9 @@ import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
+import com.alibaba.fastjson.JSONException;
+import com.alibaba.fastjson.JSONObject;
+
 import net.xmeter.SubBean;
 import net.xmeter.Util;
 
@@ -33,6 +36,7 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 	private boolean connectFailed = false;
 	private boolean subFailed = false;
 	private boolean receivedMsgFailed = false;
+	private int receivedTimeOut = 0;
 
 	private transient ConcurrentLinkedQueue<SubBean> batches = new ConcurrentLinkedQueue<>();
 	private boolean printFlag = false;
@@ -70,8 +74,8 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 		setProperty(SAMPLE_CONDITION, option);
 	}
 	
-	public String getSampleCount() {
-		return getPropertyAsString(SAMPLE_CONDITION_VALUE, DEFAULT_SAMPLE_VALUE_COUNT);
+	public Integer getSampleCount() {
+		return getPropertyAsInt(SAMPLE_CONDITION_VALUE, DEFAULT_SAMPLE_VALUE_COUNT);
 	}
 	
 	public void setSampleCount(String count) {
@@ -120,6 +124,23 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 	public void setDebugResponse(boolean debugResponse) {
 		setProperty(DEBUG_RESPONSE, debugResponse);
 	}
+	
+	public void setRecvTimeOut(String timeOut) {
+		try {
+			int temp = Integer.parseInt(timeOut);
+			if(temp <= 0) {
+				throw new IllegalArgumentException();
+			}
+			setProperty(RECV_TIMEOUT, timeOut);
+		}catch(Exception ex) {
+			logger.info("Invalid recv time value, set to default value: " + DEFAULT_RECV_TIMEOUT);
+			setProperty(RECV_TIMEOUT, DEFAULT_RECV_TIMEOUT);
+		}
+	}
+	
+	public Integer getRecvTimeOut() {
+		return getPropertyAsInt(RECV_TIMEOUT, DEFAULT_RECV_TIMEOUT);
+	}
 
 	public String getConnClientId() {
 		return getPropertyAsString(CONN_CLIENT_ID_PREFIX, DEFAULT_CONN_PREFIX_FOR_SUB);
@@ -141,7 +162,7 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 	@Override
 	public SampleResult sample(Entry arg0) {
 		final boolean sampleByTime = SAMPLE_ON_CONDITION_OPTION1.equals(getSampleCondition());
-		final int sampleCount = Integer.parseInt(getSampleCount());
+		final int sampleCount = getSampleCount();
 		connKey = getKey();
 		if(connection == null) {
 			connection = (MqttAsyncClient) ConnectionsManager.getInstance().getConnection(connKey);
@@ -162,6 +183,7 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 					options.setConnectionTimeout(Integer.parseInt(getConnTimeout()));
 		
 					String clientId = null;
+					receivedTimeOut = getRecvTimeOut();
 					if(isClientIdSuffix()) {
 						clientId = Util.generateClientId(getConnClientId());
 					} else {
@@ -175,7 +197,7 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 						options.setPassword(getPasswordAuth().toCharArray());
 					}
 					
-					MqttAsyncClient mqtt = new MqttAsyncClient(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort(), clientId);
+					MqttAsyncClient mqtt = new MqttAsyncClient(getProtocol().toLowerCase() + "://" + getServer() + ":" + getPort(), clientId, null);
 					
 					connection = (MqttAsyncClient) ConnectionsManager.getInstance().createConnection(connKey, mqtt);
 					setListener(sampleByTime, sampleCount);
@@ -225,11 +247,11 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 			}
 			synchronized (dataLock) {
 				result.sampleStart();
-				return produceResult(result);	
+				return produceResult(result, sampleByTime);	
 			}
 		} else {
 			synchronized (dataLock) {
-				int receivedCount1 = (batches.isEmpty() ? 0 : batches.element().getReceivedCount());;
+				int receivedCount1 = (batches.isEmpty() ? 0 : batches.element().getReceivedCount());
 				boolean needWait = false;
 				if(receivedCount1 < sampleCount) {
 					needWait = true;
@@ -238,18 +260,18 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 				//logger.info(System.currentTimeMillis() + ": need wait? receivedCount=" + receivedCount + ", sampleCount=" + sampleCount);
 				if(needWait) {
 					try {
-						dataLock.wait();
+						dataLock.wait(receivedTimeOut);
 					} catch (InterruptedException e) {
 						logger.info("Received exception when waiting for notification signal: " + e.getMessage());
 					}
 				}
 				result.sampleStart();
-				return produceResult(result);
+				return produceResult(result, sampleByTime);
 			}
 		}
 	}
 	
-	private SampleResult produceResult(SampleResult result) {
+	private SampleResult produceResult(SampleResult result, boolean sampleByTime) {
 		SubBean bean = batches.poll();
 		if(bean == null) { //In case selected with time interval
 			bean = new SubBean();
@@ -257,13 +279,18 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 		int receivedCount = bean.getReceivedCount();
 		List<String> contents = bean.getContents();
 		String message = MessageFormat.format("Received {0} of message\n.", receivedCount);
-		StringBuffer content = new StringBuffer("");
+		StringBuilder content = new StringBuilder("");
 		if (isDebugResponse()) {
 			for (int i = 0; i < contents.size(); i++) {
-				content.append(contents.get(i) + " \n");
+				content.append(contents.get(i));
+				content.append(" \n");
 			}
 		}
-		result = fillOKResult(result, bean.getReceivedMessageSize(), message, content.toString());
+		if (bean.getReceivedCount() == getSampleCount()) {
+			result = fillOKResult(result, bean.getReceivedMessageSize(), message, content.toString());
+		} else {
+			return fillFailedResult(sampleByTime, result, message);
+		}
 		
 		if(receivedCount == 0) {
 			result.setEndTime(result.getStartTime());
@@ -334,7 +361,9 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 			public void messageArrived(String topic, MqttMessage message) throws Exception {
 				if(sampleByTime) {
 					synchronized (dataLock) {
-						handleSubBean(sampleByTime, new String(message.getPayload()), sampleCount);
+						String msg = new String(message.getPayload());
+						logger.debug(MessageFormat.format("recevice msg: {0}", msg ));
+						handleSubBean(sampleByTime, msg, sampleCount);
 					}
 				} else {
 					synchronized (dataLock) {
@@ -422,19 +451,27 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 		}
 		if (isAddTimestamp()) {
 			long now = System.currentTimeMillis();
-			int index = msg.indexOf(TIME_STAMP_SEP_FLAG);
-			if (index == -1 && (!printFlag)) {
-				logger.info("Payload does not include timestamp: " + msg);
-				printFlag = true;
-			} else if (index != -1) {
-				long start = Long.parseLong(msg.substring(0, index));
-				long elapsed = now - start;
-				
-				double avgElapsedTime = bean.getAvgElapsedTime();
-				int receivedCount = bean.getReceivedCount();
-				avgElapsedTime = (avgElapsedTime * receivedCount + elapsed) / (receivedCount + 1);
-				bean.setAvgElapsedTime(avgElapsedTime);
+			//int index = msg.indexOf(TIME_STAMP_SEP_FLAG);
+			
+			try {
+				JSONObject recvMsg = JSONObject.parseObject(msg).getJSONObject("result").getJSONArray("msg").getJSONObject(0);
+				if (recvMsg == null || (!recvMsg.containsKey("time") && (!printFlag))) {
+					logger.info("Payload does not include timestamp: " + msg);
+					printFlag = true;
+				} else if (recvMsg != null && recvMsg.containsKey("time")) {
+					Long start = recvMsg.getLong("time");
+					Long elapsed = now - start * 1000;
+					logger.info(MessageFormat.format("Payload get start time : {0}, now time : {1}", start, now));
+					printFlag = true;
+					double avgElapsedTime = bean.getAvgElapsedTime();
+					int receivedCount = bean.getReceivedCount();
+					avgElapsedTime = (avgElapsedTime * receivedCount + elapsed) / (receivedCount + 1);
+					bean.setAvgElapsedTime(avgElapsedTime);
+				}
+			} catch (JSONException e) {
+				logger.error("msg parse failed. errormsg: " + e);
 			}
+
 		}
 		if (isDebugResponse()) {
 			bean.getContents().add(msg);
@@ -491,12 +528,12 @@ public class SubSampler extends AbstractMQTTSampler implements ThreadListener {
 				
 				@Override
 				public void onSuccess(IMqttToken asyncActionToken) {
-					logger.info(MessageFormat.format("Connection {0} disconnect successfully.", connection));
+					logger.info(MessageFormat.format("Connection {0} disconnect successfully.", connection.getClientId()));
 				}
 				
 				@Override
 				public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-					logger.info(MessageFormat.format("Connection {0} failed to disconnect.", connection));
+					logger.info(MessageFormat.format("Connection {0} failed to disconnect.", connection.getClientId()));
 				}
 			});
 		} catch (MqttException e) {

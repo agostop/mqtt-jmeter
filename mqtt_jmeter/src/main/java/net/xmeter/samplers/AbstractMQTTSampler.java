@@ -26,7 +26,18 @@ public abstract class AbstractMQTTSampler extends AbstractSampler implements Con
 	}
 	
 	public int getMqttVersion() {
-		return getPropertyAsInt(MQTT_VERSION, MqttConnectOptions.MQTT_VERSION_3_1);
+		int version = 0;
+		switch (getPropertyAsString(MQTT_VERSION, MQTT_VERSION_3_1)) {
+		case MQTT_VERSION_3_1_1:
+			version = 3;
+			break;
+
+		default:
+			version = 4;
+			break;
+		}
+		
+		return version;
 	}
 	
 	public void setMqttVersion(String version) {
